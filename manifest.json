@@ -1,11 +1,10 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "obsidian-streaks",
+	"name": "Streaks",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "Track habit streaks with fire emojis and grace periods in your daily notes",
+	"author": "Richard Cao",
+	"authorUrl": "https://github.com/richardc412",
 	"isDesktopOnly": false
 }

@@ -1,134 +1,119 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { Plugin, MarkdownView, Notice } from "obsidian";
 
-// Remember to rename these classes and interfaces!
+export default class StreaksPlugin extends Plugin {
+	getLineIndex(element: HTMLElement) {
+		const lineElement = element.closest(".cm-line");
+		if (!lineElement) return -1;
+		const allLines = Array.from(document.querySelectorAll(".cm-line"));
+		return allLines.indexOf(lineElement);
+	}
 
-interface MyPluginSettings {
-	mySetting: string;
-}
+	// TODO: Refactor to a generic path string
+	getPreviousDayPath(currentPath: string): string {
+		// Extract the date from the file path
+		const datePattern = /(\d{4})-([A-Za-z]{3})-(\d{2})/;
+		const match = currentPath.match(datePattern);
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
-}
+		if (!match) {
+			throw new Error("Could not extract date from path: " + currentPath);
+		}
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+		// Extract year, month, and day from the match
+		const year = parseInt(match[1]);
+		const month = match[2];
+		const day = parseInt(match[3]);
+
+		// Create a Date object for the current date
+		const monthMap: { [key: string]: number } = {
+			Jan: 0,
+			Feb: 1,
+			Mar: 2,
+			Apr: 3,
+			May: 4,
+			Jun: 5,
+			Jul: 6,
+			Aug: 7,
+			Sep: 8,
+			Oct: 9,
+			Nov: 10,
+			Dec: 11,
+		};
+
+		const currentDate = new Date(year, monthMap[month], day);
+
+		// Calculate the previous day
+		const previousDate = new Date(currentDate);
+		previousDate.setDate(currentDate.getDate() - 1);
+
+		// Format the previous day's path
+		const previousYear = previousDate.getFullYear();
+		const previousMonth = [
+			"Jan",
+			"Feb",
+			"Mar",
+			"Apr",
+			"May",
+			"Jun",
+			"Jul",
+			"Aug",
+			"Sep",
+			"Oct",
+			"Nov",
+			"Dec",
+		][previousDate.getMonth()];
+		const previousDay = String(previousDate.getDate()).padStart(2, "0");
+
+		// Extract the base directory structure
+		const lastSlashIndex = currentPath.lastIndexOf("/");
+		const directory = currentPath.substring(0, lastSlashIndex);
+		const basePath = directory.substring(0, directory.lastIndexOf("/"));
+
+		// Handle month change in path
+		if (previousDate.getMonth() !== currentDate.getMonth()) {
+			return `${basePath}/${previousMonth}/${previousYear}-${previousMonth}-${previousDay}`;
+		}
+
+		// Same month - just replace the date part
+		return `${directory}/${previousYear}-${previousMonth}-${previousDay}`;
+	}
 
 	async onload() {
-		await this.loadSettings();
+		this.registerDomEvent(document, "click", async (event: MouseEvent) => {
+			const target = event.target as HTMLElement;
+			if (target.tagName !== "INPUT") return;
+			if (target.getAttribute("type") !== "checkbox") return;
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
+			const isChecked = (target as HTMLInputElement).checked;
+			const lineIndex = this.getLineIndex(target);
+			if (lineIndex === -1) return;
+			// Get the line content from the editor at that index
+			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (!view) return;
+			const editor = view.editor;
+			const rawLineText = editor.getLine(lineIndex);
+
+			const match = rawLineText.match(/^- \[( |x)\] (.+?)\s*🔥$/);
+			if (!match) return;
+			const habitText = match[2];
+
+			// Gets current file path
+			const activeFile = this.app.workspace.getActiveFile();
+			if (!activeFile) return;
+			const filePath = activeFile.path; // relative path in the vault
+			new Notice(`Current file path: ${filePath}`);
+
+			const template = "daily notes/YYYY/MMMM/YYYY-MMM-DD";
+			const previousDailyNotePath = this.getPreviousDayPath(filePath);
+			new Notice(previousDailyNotePath ?? "NULL");
+			if (!previousDailyNotePath) return;
+
+			new Notice(
+				`Checkbox ${isChecked ? "checked" : "unchecked"}: ${habitText}`
+			);
 		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
-			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
-			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-			}
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
 	}
 
 	onunload() {
-
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const {containerEl} = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
+		// Cleanup if necessary
 	}
 }
