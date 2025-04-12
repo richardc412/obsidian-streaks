@@ -1,4 +1,4 @@
-import { Plugin, MarkdownView, Notice } from "obsidian";
+import { Plugin, MarkdownView, Notice, TFile } from "obsidian";
 
 export default class StreaksPlugin extends Plugin {
 	getLineIndex(element: HTMLElement) {
@@ -77,6 +77,38 @@ export default class StreaksPlugin extends Plugin {
 		return `${directory}/${previousYear}-${previousMonth}-${previousDay}`;
 	}
 
+	/**
+	 * Checks if a note contains a habit streak pattern and returns the streak count
+	 * @param {string} notePath - The path to the note file (e.g., "daily notes/2025/2025-Apr-10")
+	 * @param {string} habit - The habit name to look for
+	 * @returns {Promise<number>} - The streak count if found, 0 otherwise
+	 */
+	async getHabitStreak(notePath: string, habit: string) {
+		try {
+			// Get the file from the path
+			const abstractFile = this.app.vault.getAbstractFileByPath(notePath);
+			const file = abstractFile as TFile;
+
+			// Read the file content
+			const noteContent = await this.app.vault.read(file);
+
+			// Escape special regex characters in the habit string
+			const escapedHabit = habit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+			// Create a regex pattern to match a checked checkbox with the habit followed by 🔥 and a number
+			const pattern = new RegExp(`- \\[x\\] ${escapedHabit} 🔥 (\\d+)`);
+
+			// Try to find a match in the note content
+			const match = noteContent.match(pattern);
+
+			// If a checked habit is found, return the captured integer, otherwise return 0
+			return match ? parseInt(match[1], 10) : 0;
+		} catch (error) {
+			console.error(`Error checking habit streak: ${error}`);
+			return 0;
+		}
+	}
+
 	async onload() {
 		this.registerDomEvent(document, "click", async (event: MouseEvent) => {
 			const target = event.target as HTMLElement;
@@ -92,7 +124,7 @@ export default class StreaksPlugin extends Plugin {
 			const editor = view.editor;
 			const rawLineText = editor.getLine(lineIndex);
 
-			const match = rawLineText.match(/^- \[( |x)\] (.+?)\s*🔥$/);
+			const match = rawLineText.match(/^- \[( |x)\] (.+?)\s*🔥(.*)$/);
 			if (!match) return;
 			const habitText = match[2];
 
@@ -110,6 +142,26 @@ export default class StreaksPlugin extends Plugin {
 			new Notice(
 				`Checkbox ${isChecked ? "checked" : "unchecked"}: ${habitText}`
 			);
+
+			const prevHabitStreak = await this.getHabitStreak(
+				`${previousDailyNotePath}.md`,
+				habitText
+			);
+			if (isChecked) {
+				editor.replaceRange(
+					`- [x] ${habitText} 🔥${prevHabitStreak + 1}`,
+					{ line: lineIndex, ch: 0 },
+					{ line: lineIndex, ch: rawLineText.length }
+				);
+			} else {
+				editor.replaceRange(
+					`- [ ] ${habitText} 🔥${prevHabitStreak}`,
+					{ line: lineIndex, ch: 0 },
+					{ line: lineIndex, ch: rawLineText.length }
+				);
+			}
+
+			new Notice(`Habit count: ${prevHabitStreak} `);
 		});
 	}
 
