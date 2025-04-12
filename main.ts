@@ -1,7 +1,7 @@
-import { Plugin, MarkdownView, Notice, TFile } from "obsidian";
+import { Plugin, MarkdownView, Notice, TFile, Editor } from "obsidian";
 
 export default class StreaksPlugin extends Plugin {
-	getLineIndex(element: HTMLElement) {
+	getLineIndex(element: HTMLElement): number {
 		const lineElement = element.closest(".cm-line");
 		if (!lineElement) return -1;
 		const allLines = Array.from(document.querySelectorAll(".cm-line"));
@@ -83,25 +83,18 @@ export default class StreaksPlugin extends Plugin {
 	 * @param {string} habit - The habit name to look for
 	 * @returns {Promise<number>} - The streak count if found, 0 otherwise
 	 */
-	async getHabitStreak(notePath: string, habit: string) {
+	async getHabitStreak(notePath: string, habit: string): Promise<number> {
 		try {
-			// Get the file from the path
 			const abstractFile = this.app.vault.getAbstractFileByPath(notePath);
+			if (!abstractFile) return 0;
+
 			const file = abstractFile as TFile;
-
-			// Read the file content
 			const noteContent = await this.app.vault.read(file);
-
-			// Escape special regex characters in the habit string
 			const escapedHabit = habit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-			// Create a regex pattern to match a checked checkbox with the habit followed by 🔥 and a number
-			const pattern = new RegExp(`- \\[x\\] ${escapedHabit} 🔥 (\\d+)`);
-
-			// Try to find a match in the note content
+			const pattern = new RegExp(
+				`- \\[x\\]\s*${escapedHabit}\s*🔥\s*(\\d+)`
+			);
 			const match = noteContent.match(pattern);
-
-			// If a checked habit is found, return the captured integer, otherwise return 0
 			return match ? parseInt(match[1], 10) : 0;
 		} catch (error) {
 			console.error(`Error checking habit streak: ${error}`);
@@ -118,35 +111,30 @@ export default class StreaksPlugin extends Plugin {
 			const isChecked = (target as HTMLInputElement).checked;
 			const lineIndex = this.getLineIndex(target);
 			if (lineIndex === -1) return;
+
 			// Get the line content from the editor at that index
 			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (!view) return;
+
 			const editor = view.editor;
 			const rawLineText = editor.getLine(lineIndex);
-
-			const match = rawLineText.match(/^- \[( |x)\] (.+?)\s*🔥(.*)$/);
+			const match = rawLineText.match(/^- \[( |x)\] (.+?)\s*🔥\s*(.*)$/);
 			if (!match) return;
-			const habitText = match[2];
 
-			// Gets current file path
+			const habitText = match[2];
 			const activeFile = this.app.workspace.getActiveFile();
 			if (!activeFile) return;
-			const filePath = activeFile.path; // relative path in the vault
-			new Notice(`Current file path: ${filePath}`);
 
+			const filePath = activeFile.path; // relative path in the vault
 			const template = "daily notes/YYYY/MMMM/YYYY-MMM-DD";
 			const previousDailyNotePath = this.getPreviousDayPath(filePath);
-			new Notice(previousDailyNotePath ?? "NULL");
 			if (!previousDailyNotePath) return;
-
-			new Notice(
-				`Checkbox ${isChecked ? "checked" : "unchecked"}: ${habitText}`
-			);
 
 			const prevHabitStreak = await this.getHabitStreak(
 				`${previousDailyNotePath}.md`,
 				habitText
 			);
+
 			if (isChecked) {
 				editor.replaceRange(
 					`- [x] ${habitText} 🔥${prevHabitStreak + 1}`,
@@ -160,8 +148,6 @@ export default class StreaksPlugin extends Plugin {
 					{ line: lineIndex, ch: rawLineText.length }
 				);
 			}
-
-			new Notice(`Habit count: ${prevHabitStreak} `);
 		});
 	}
 
