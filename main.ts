@@ -92,7 +92,7 @@ export default class StreaksPlugin extends Plugin {
 			const noteContent = await this.app.vault.read(file);
 			const escapedHabit = habit.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 			const pattern = new RegExp(
-				`- \\[x\\]\s*${escapedHabit}\s*🔥\s*(\\d+)`
+				`- \\[x\\]\\s*${escapedHabit}\\s*🔥\\s*\\*\\*(\\d+)\\*\\*`
 			);
 			const match = noteContent.match(pattern);
 			return match ? parseInt(match[1], 10) : 0;
@@ -137,13 +137,13 @@ export default class StreaksPlugin extends Plugin {
 
 			if (isChecked) {
 				editor.replaceRange(
-					`- [x] ${habitText} 🔥${prevHabitStreak + 1}`,
+					`- [x] ${habitText} 🔥 **${prevHabitStreak + 1}**`,
 					{ line: lineIndex, ch: 0 },
 					{ line: lineIndex, ch: rawLineText.length }
 				);
 			} else {
 				editor.replaceRange(
-					`- [ ] ${habitText} 🔥${prevHabitStreak}`,
+					`- [ ] ${habitText} 🔥 **${prevHabitStreak}**`,
 					{ line: lineIndex, ch: 0 },
 					{ line: lineIndex, ch: rawLineText.length }
 				);
